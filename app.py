@@ -28,7 +28,7 @@ st.markdown("""
 def load_models():
     processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
     model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
-    reader = easyocr.Reader(['en'], gpu=False)
+    reader = easyocr.Reader(['en', 'ru'], gpu=False)
     return processor, model, reader
 
 @st.cache_data
