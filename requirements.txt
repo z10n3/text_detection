@@ -1,9 +1,10 @@
 streamlit
+easyocr
+opencv-python-headless
 pillow
+numpy
+pandas
+pyspellchecker
 torch
 torchvision
 transformers
-pyspellchecker
-easyocr
-opencv-python-headless
-numpy
