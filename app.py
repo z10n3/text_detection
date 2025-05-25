@@ -185,13 +185,27 @@ def main():
             status_text.text("Detecting text regions...")
             progress_bar.progress(20)
             
-            detections = reader.readtext(image_np, paragraph=paragraph_mode, width_ths=width_ths, height_ths=height_ths)
+            try:
+                detections = reader.readtext(image_np, paragraph=paragraph_mode, width_ths=width_ths, height_ths=height_ths)
+            except Exception as e:
+                st.error(f"Error during text detection: {str(e)}")
+                detections = reader.readtext(image_np)
             
-            filtered_detections = [
-                (bbox, text, conf) 
-                for bbox, text, conf in detections 
-                if conf >= confidence_threshold
-            ]
+            if not detections:
+                st.warning("No text detected in the image.")
+                progress_bar.empty()
+                status_text.empty()
+                return
+            
+            filtered_detections = []
+            for detection in detections:
+                try:
+                    if len(detection) >= 3:
+                        bbox, text, conf = detection[0], detection[1], detection[2]
+                        if conf >= confidence_threshold:
+                            filtered_detections.append((bbox, text, conf))
+                except Exception as e:
+                    continue
             
             if not filtered_detections:
                 st.warning("No text detected. Try lowering the confidence threshold.")
@@ -204,9 +218,12 @@ def main():
             
             vis_image = image_np.copy()
             for bbox, text, conf in filtered_detections:
-                points = np.array(bbox, np.int32).reshape((-1, 1, 2))
-                color = (0, 255, 0) if has_cyrillic(text) else (255, 0, 0)
-                cv2.polylines(vis_image, [points], True, color, 2)
+                try:
+                    points = np.array(bbox, np.int32).reshape((-1, 1, 2))
+                    color = (0, 255, 0) if has_cyrillic(text) else (255, 0, 0)
+                    cv2.polylines(vis_image, [points], True, color, 2)
+                except Exception as e:
+                    continue
             
             col1, col2 = st.columns(2)
             
