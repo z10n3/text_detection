@@ -149,10 +149,10 @@ def main():
     with st.sidebar:
         st.header("Settings")
         enable_correction = st.checkbox("Enable Spell Correction", value=True)
-        confidence_threshold = st.slider("Detection Confidence Threshold", 0.1, 1.0, 0.4, 0.05)
+        confidence_threshold = st.slider("Detection Confidence Threshold", 0.01, 1.0, 0.20, 0.01)
         paragraph_mode = st.checkbox("Paragraph Mode (merge nearby text)", value=True)
-        width_ths = st.slider("Text Width Threshold", 0.1, 2.0, 0.7, 0.1)
-        height_ths = st.slider("Text Height Threshold", 0.1, 2.0, 0.7, 0.1)
+        width_ths = st.slider("Text Width Threshold", 0.1, 2.0, 0.3, 0.1)
+        height_ths = st.slider("Text Height Threshold", 0.1, 2.0, 0.3, 0.1)
         use_trocr = st.checkbox("Use TrOCR for English text", value=True)
         
         st.header("Advanced Settings")
@@ -188,8 +188,15 @@ def main():
             try:
                 detections = reader.readtext(image_np, paragraph=paragraph_mode, width_ths=width_ths, height_ths=height_ths)
             except Exception as e:
-                st.error(f"Error during text detection: {str(e)}")
+                st.warning(f"Advanced parameters failed, using basic detection: {str(e)}")
                 detections = reader.readtext(image_np)
+            
+            # Debug: Show all detections with their confidence scores
+            st.write(f"Debug: Found {len(detections)} total detections")
+            for i, detection in enumerate(detections[:5]):  # Show first 5
+                if len(detection) >= 3:
+                    bbox, text, conf = detection[0], detection[1], detection[2]
+                    st.write(f"Detection {i+1}: '{text}' (confidence: {conf:.3f})")
             
             if not detections:
                 st.warning("No text detected in the image.")
