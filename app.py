@@ -96,7 +96,7 @@ def preprocess_and_crop(image, bbox):
     x_min, x_max = int(min(x_coords)), int(max(x_coords))
     y_min, y_max = int(min(y_coords)), int(max(y_coords))
     
-    padding = 5
+    padding = 8
     h, w = image.shape[:2]
     x_min = max(0, x_min - padding)
     y_min = max(0, y_min - padding)
@@ -104,11 +104,20 @@ def preprocess_and_crop(image, bbox):
     y_max = min(h, y_max + padding)
     
     cropped = image[y_min:y_max, x_min:x_max]
+    
+    # Convert to grayscale for better OCR
+    if len(cropped.shape) == 3:
+        cropped_gray = cv2.cvtColor(cropped, cv2.COLOR_RGB2GRAY)
+        # Apply adaptive thresholding to improve text clarity
+        cropped_thresh = cv2.adaptiveThreshold(cropped_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+        # Convert back to RGB
+        cropped = cv2.cvtColor(cropped_thresh, cv2.COLOR_GRAY2RGB)
+    
     cropped_pil = Image.fromarray(cropped)
     
     width, height = cropped_pil.size
-    if width < 64 or height < 32:
-        scale_factor = max(64/width, 32/height, 1.5)
+    if width < 100 or height < 40:
+        scale_factor = max(100/width, 40/height, 2.0)
         new_width = int(width * scale_factor)
         new_height = int(height * scale_factor)
         cropped_pil = cropped_pil.resize((new_width, new_height), Image.LANCZOS)
@@ -140,13 +149,17 @@ def main():
     with st.sidebar:
         st.header("Settings")
         enable_correction = st.checkbox("Enable Spell Correction", value=True)
-        confidence_threshold = st.slider("Detection Confidence Threshold", 0.1, 1.0, 0.3, 0.05)
+        confidence_threshold = st.slider("Detection Confidence Threshold", 0.1, 1.0, 0.4, 0.05)
+        paragraph_mode = st.checkbox("Paragraph Mode (merge nearby text)", value=True)
+        width_ths = st.slider("Text Width Threshold", 0.1, 2.0, 0.7, 0.1)
+        height_ths = st.slider("Text Height Threshold", 0.1, 2.0, 0.7, 0.1)
         use_trocr = st.checkbox("Use TrOCR for English text", value=True)
         
-        st.header("Recognition Priority")
-        st.write("• Cyrillic text: EasyOCR only")
-        st.write("• English text: Both models")
-        st.write("• High confidence: EasyOCR preferred")
+        st.header("Advanced Settings")
+        st.write("• **Paragraph Mode**: Groups nearby text together")
+        st.write("• **Width/Height Threshold**: Controls text grouping sensitivity")
+        st.write("• **Lower values**: More aggressive grouping")
+        st.write("• **Higher values**: Less grouping, more individual words")
         
         st.header("About")
         st.write("This app uses EasyOCR for multilingual detection and TrOCR for English handwritten text recognition.")
@@ -172,7 +185,7 @@ def main():
             status_text.text("Detecting text regions...")
             progress_bar.progress(20)
             
-            detections = reader.readtext(image_np)
+            detections = reader.readtext(image_np, paragraph=paragraph_mode, width_ths=width_ths, height_ths=height_ths)
             
             filtered_detections = [
                 (bbox, text, conf) 
