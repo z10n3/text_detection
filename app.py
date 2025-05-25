@@ -29,7 +29,7 @@ st.markdown("""
 def load_models():
     processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
     model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
-    reader = easyocr.Reader(['en', 'ru', 'uz'], gpu=False)
+    reader = easyocr.Reader(['en', 'ru'], gpu=False)
     return processor, model, reader
 
 @st.cache_data
@@ -135,7 +135,7 @@ def choose_best_text(easyocr_text, trocr_text, confidence):
 
 def main():
     st.title("Multilingual Handwritten Text Reader")
-    st.write("Upload an image with handwritten text to extract and recognize it (supports English, Russian, and Uzbek).")
+    st.write("Upload an image with handwritten text to extract and recognize it (supports English and Russian).")
     
     with st.sidebar:
         st.header("Settings")
