@@ -8,10 +8,9 @@ from spellchecker import SpellChecker
 import easyocr
 import time
 import os
-import re
 
 st.set_page_config(
-    page_title="Multilingual Handwritten Text Reader",
+    page_title="Handwritten Text Reader",
     page_icon="✏️",
     layout="centered"
 )
@@ -51,43 +50,18 @@ def load_wordlist(path):
     except:
         return set()
 
-def detect_language(text):
-    cyrillic_pattern = re.compile(r'[а-яё]', re.IGNORECASE)
-    latin_pattern = re.compile(r'[a-z]', re.IGNORECASE)
-    
-    cyrillic_count = len(cyrillic_pattern.findall(text))
-    latin_count = len(latin_pattern.findall(text))
-    
-    if cyrillic_count > latin_count:
-        return 'cyrillic'
-    elif latin_count > 0:
-        return 'latin'
-    else:
-        return 'unknown'
-
-def has_cyrillic(text):
-    return bool(re.search(r'[а-яё]', text, re.IGNORECASE))
-
-def correct_word(word, spell_en, russian_words, uzbek_words, language_hint='unknown'):
+def correct_word(word, spell_en, russian_words, uzbek_words):
     if not word:
         return word
     
     lw = word.lower()
-    
-    if lw in spell_en or lw in russian_words or lw in uzbek_words:
+    if lw in spell_en:
         return word
-    
-    if language_hint == 'cyrillic' or has_cyrillic(word):
+    elif lw in russian_words or lw in uzbek_words:
         return word
-    elif language_hint == 'latin':
+    else:
         suggestion = spell_en.correction(word)
         return suggestion if suggestion else word
-    else:
-        if any(c.isalpha() and ord(c) < 128 for c in word):
-            suggestion = spell_en.correction(word)
-            return suggestion if suggestion else word
-        else:
-            return word
 
 def preprocess_and_crop(image, bbox):
     x_coords = [point[0] for point in bbox]
@@ -96,7 +70,7 @@ def preprocess_and_crop(image, bbox):
     x_min, x_max = int(min(x_coords)), int(max(x_coords))
     y_min, y_max = int(min(y_coords)), int(max(y_coords))
     
-    padding = 5
+    padding = 2
     h, w = image.shape[:2]
     x_min = max(0, x_min - padding)
     y_min = max(0, y_min - padding)
@@ -104,52 +78,19 @@ def preprocess_and_crop(image, bbox):
     y_max = min(h, y_max + padding)
     
     cropped = image[y_min:y_max, x_min:x_max]
-    cropped_pil = Image.fromarray(cropped)
-    
-    width, height = cropped_pil.size
-    if width < 64 or height < 32:
-        scale_factor = max(64/width, 32/height, 1.5)
-        new_width = int(width * scale_factor)
-        new_height = int(height * scale_factor)
-        cropped_pil = cropped_pil.resize((new_width, new_height), Image.LANCZOS)
-    
-    return cropped_pil
-
-def choose_best_text(easyocr_text, trocr_text, confidence):
-    if not trocr_text.strip():
-        return easyocr_text
-    
-    if not easyocr_text.strip():
-        return trocr_text
-    
-    if has_cyrillic(easyocr_text):
-        return easyocr_text
-    
-    if confidence > 0.8:
-        return easyocr_text
-    
-    if len(trocr_text.strip()) > len(easyocr_text.strip()) * 1.5:
-        return trocr_text
-    
-    return easyocr_text
+    return Image.fromarray(cropped)
 
 def main():
-    st.title("Multilingual Handwritten Text Reader")
-    st.write("Upload an image with handwritten text to extract and recognize it (supports English and Russian).")
+    st.title("Handwritten Text Reader")
+    st.write("Upload an image with handwritten text to extract and recognize it.")
     
     with st.sidebar:
         st.header("Settings")
         enable_correction = st.checkbox("Enable Spell Correction", value=True)
-        confidence_threshold = st.slider("Detection Confidence Threshold", 0.1, 1.0, 0.3, 0.05)
-        use_trocr = st.checkbox("Use TrOCR for English text", value=True)
-        
-        st.header("Recognition Priority")
-        st.write("• Cyrillic text: EasyOCR only")
-        st.write("• English text: Both models")
-        st.write("• High confidence: EasyOCR preferred")
+        confidence_threshold = st.slider("Detection Confidence Threshold", 0.1, 1.0, 0.4, 0.05)
         
         st.header("About")
-        st.write("This app uses EasyOCR for multilingual detection and TrOCR for English handwritten text recognition.")
+        st.write("This app uses EasyOCR for text detection and TrOCR for handwritten text recognition.")
     
     processor, model, reader = load_models()
     
@@ -190,19 +131,18 @@ def main():
             status_text.text("Creating visualization...")
             
             vis_image = image_np.copy()
-            for bbox, text, conf in filtered_detections:
+            for bbox, _, conf in filtered_detections:
                 points = np.array(bbox, np.int32).reshape((-1, 1, 2))
-                color = (0, 255, 0) if has_cyrillic(text) else (255, 0, 0)
-                cv2.polylines(vis_image, [points], True, color, 2)
+                cv2.polylines(vis_image, [points], True, (0, 255, 0), 2)
             
             col1, col2 = st.columns(2)
             
             with col1:
                 st.subheader("Detected Regions")
-                st.image(vis_image, caption="Green: Cyrillic text, Red: Latin text")
+                st.image(vis_image, caption="Green boxes show detected text regions")
             
             progress_bar.progress(60)
-            status_text.text("Processing detected text...")
+            status_text.text("Processing with TrOCR...")
             
             final_lines = []
             total_regions = len(filtered_detections)
@@ -212,30 +152,28 @@ def main():
                 progress_bar.progress(int(progress_value))
                 status_text.text(f"Processing region {i+1}/{total_regions}...")
                 
-                language_hint = detect_language(easyocr_text)
+                cropped = preprocess_and_crop(image_np, bbox)
                 
-                if use_trocr and not has_cyrillic(easyocr_text) and conf < 0.9:
-                    try:
-                        cropped = preprocess_and_crop(image_np, bbox)
-                        pixel_values = processor(images=cropped, return_tensors="pt").pixel_values
+                try:
+                    pixel_values = processor(images=cropped, return_tensors="pt").pixel_values
+                    
+                    with torch.no_grad():
+                        generated_ids = model.generate(pixel_values)
+                        trocr_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+                    
+                    if enable_correction and trocr_text.strip():
+                        words = trocr_text.split()
+                        corrected_words = [correct_word(word, spell_en, russian_words, uzbek_words) for word in words]
+                        final_text = ' '.join(corrected_words)
+                    else:
+                        final_text = trocr_text
+                    
+                    if final_text.strip():
+                        final_lines.append(final_text.strip())
                         
-                        with torch.no_grad():
-                            generated_ids = model.generate(pixel_values)
-                            trocr_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-                        
-                        final_text = choose_best_text(easyocr_text, trocr_text, conf)
-                    except:
-                        final_text = easyocr_text
-                else:
-                    final_text = easyocr_text
-                
-                if enable_correction and final_text.strip():
-                    words = final_text.split()
-                    corrected_words = [correct_word(word, spell_en, russian_words, uzbek_words, language_hint) for word in words]
-                    final_text = ' '.join(corrected_words)
-                
-                if final_text.strip():
-                    final_lines.append(final_text.strip())
+                except:
+                    if easyocr_text.strip():
+                        final_lines.append(easyocr_text.strip())
             
             progress_bar.progress(100)
             status_text.text("Processing complete!")
@@ -257,16 +195,6 @@ def main():
                         file_name="extracted_text.txt",
                         mime="text/plain"
                     )
-                    
-                    st.subheader("Language Statistics")
-                    cyrillic_regions = sum(1 for line in final_lines if has_cyrillic(line))
-                    latin_regions = len(final_lines) - cyrillic_regions
-                    
-                    col_stats1, col_stats2 = st.columns(2)
-                    with col_stats1:
-                        st.metric("Cyrillic Regions", cyrillic_regions)
-                    with col_stats2:
-                        st.metric("Latin Regions", latin_regions)
                 else:
                     st.warning("No text could be extracted from the image.")
 
