@@ -1,4 +1,6 @@
-Handwritten Text Reader is a Streamlit-based web application that allows you to detect and recognize handwritten text from images. It uses EasyOCR for text detection and Microsoft's TrOCR model for high-quality handwritten text recognition. Optional spell correction is also supported for English text, with the ability to add Russian and Uzbek wordlists for improved accuracy.
+Handwritten Text Reader is a Streamlit-based web application that allows you to detect and recognize handwritten text from images. It uses EasyOCR for text
+detection and Microsoft's TrOCR model for high-quality handwritten text recognition. Optional spell correction is also supported for English text,
+with the ability to add Russian and Uzbek wordlists for improved accuracy.
 
 
    Features
